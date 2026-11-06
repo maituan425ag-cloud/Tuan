@@ -1120,6 +1120,8 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   // ---------- kỷ lục & bảng xếp hạng ----------
   const LB = (() => {
     let uid = null;
+    // DÁN ĐƯỜNG DẪN FIREBASE REALTIME DATABASE VÀO ĐÂY để bật bảng xếp hạng toàn cầu khi chơi qua GitHub, ví dụ: 'https://ten-du-an-default-rtdb.firebaseio.com'
+    const LB_URL = 'https://run-away-97e7e-default-rtdb.asia-southeast1.firebasedatabase.app/'.replace(/\/+$/, '');
     const getName = () => (Store.get('chayngo-name') || '').trim().slice(0, 14) || 'Người chơi';
     const setName = n => { n = (n || '').trim().slice(0, 14); Store.set('chayngo-name', n); };
     let local = [];
@@ -1128,6 +1130,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     // bảng toàn cầu: chỉ chạy khi trang được đăng trên Claude (có db); nếu không thì dùng bảng trên máy
     const ready = (async () => {
       try {
+        if (LB_URL) { uid = Store.get('chayngo-pid') || ('p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)); Store.set('chayngo-pid', uid); return 'rest'; }
         if (!window.claude || !claude.use) return null;
         const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
         if (!db || !user) return null;
@@ -1137,6 +1140,14 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     })();
     async function submit(sc) {
       const db = await ready; if (!db || !(sc > 0)) return;
+      if (db === 'rest') {
+        try {
+          const u = LB_URL + '/scores/' + uid + '.json', old = await (await fetch(u)).json();
+          if (!old || (old.score || 0) < sc) await fetch(u, { method: 'PUT', body: JSON.stringify({ name: getName(), score: sc, t: Date.now() }) });
+          else if (old.name !== getName()) await fetch(u, { method: 'PATCH', body: JSON.stringify({ name: getName() }) });
+        } catch (e) {}
+        return;
+      }
       try {
         const ref = db.collection('scores').doc(uid), snap = await ref.get(), old = snap.exists ? snap.data() : null;
         if (!old || (old.score || 0) < sc) await ref.set({ name: getName(), score: sc, t: Date.now() });
@@ -1145,6 +1156,9 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     }
     async function top() {
       const db = await ready; if (!db) return null;
+      if (db === 'rest') {
+        try { const r = await (await fetch(LB_URL + '/scores.json?orderBy="score"&limitToLast=20')).json(); return Object.keys(r || {}).map(k => Object.assign({ id: k }, r[k])).sort((a, b) => b.score - a.score); } catch (e) { return null; }
+      }
       try { const q = await db.collection('scores').orderBy('score', 'desc').limit(20).get(); return q.docs.map(d => Object.assign({ id: d.id }, d.data())); } catch (e) { return null; }
     }
     return { getName, setName, addLocal, submit, top, ready, get local() { return local; }, get uid() { return uid; } };
@@ -1178,7 +1192,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     lbList.innerHTML = ''; $('lbSrc').textContent = 'Đang tải…';
     const rows = await LB.top();
     const glob = !!rows, data = rows || LB.local.slice().sort((a, b) => b.score - a.score).slice(0, 1).map(r => Object.assign({ id: 'l' }, r, { name: LB.getName() }));
-    $('lbSrc').textContent = glob ? '🌐 Kỷ lục của tất cả người chơi' : '📱 Kỷ lục trên máy này (bảng toàn cầu chỉ có khi mở bản đã đăng trên Claude)';
+    $('lbSrc').textContent = glob ? '🌐 Kỷ lục của tất cả người chơi' : '📱 Kỷ lục trên máy này (chưa kết nối bảng toàn cầu)';
     if (!data.length) { $('lbSrc').textContent += ' — chưa có ai, chạy một ván đi!'; return; }
     data.forEach((r, i) => {
       const li = document.createElement('li'); li.className = glob ? (r.id === LB.uid ? 'me' : '') : 'loc';
