@@ -34,6 +34,23 @@
 .how summary { cursor: pointer; font-size: 12px; color: var(--ink-dim); }
 .how > * + * { margin-top: 10px; }
 .lobby .row { margin-top: 2px; }
+
+.rec { align-items: center; justify-content: center; text-align: center; }
+.rec > :first-child { margin-top: 0 !important; }
+.rec .trophy { font-size: 74px; animation: recPop .7s cubic-bezier(.2,1.6,.4,1) both; }
+.rec .recScore { font: 800 clamp(54px,18vw,84px)/1 var(--font-display); color: var(--coin); font-variant-numeric: tabular-nums; text-shadow: 0 0 24px rgba(255,200,61,.5); }
+.rec .nm, #lb .nm { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-dim); align-items: center; }
+.rec input, #lb input { background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); padding: 8px 12px; font-size: 15px; text-align: center; width: 190px; }
+#confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+#confetti i { position: absolute; top: -14px; width: 8px; height: 14px; border-radius: 2px; animation: cfFall linear forwards; }
+@keyframes cfFall { to { transform: translateY(110vh) rotate(720deg); } }
+@keyframes recPop { from { transform: scale(0) rotate(-20deg); } to { transform: none; } }
+#lbList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 100%; max-height: 44vh; overflow-y: auto; }
+#lbList li { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.06); font-size: 14px; color: var(--ink); }
+#lbList li.me { background: rgba(255,200,61,.18); border: 1px solid var(--coin); }
+#lbList li b:first-child { width: 2.2em; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+#lbList li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#lbList li b:last-child { font-variant-numeric: tabular-nums; color: var(--coin); }
 </style></head><body>
 <title>Chạy Ngõ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -139,6 +156,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   background: linear-gradient(to top, rgba(15, 11, 36, 0.97) 10%, rgba(15, 11, 36, 0.78) 60%, rgba(15, 11, 36, 0) 100%);
 }
 .panel > :first-child { margin-top: auto; }
+.panel > * { flex-shrink: 0; }
 .panel h1, .panel h2 {
   margin: 0; font-family: var(--font-display); font-style: italic; font-weight: 700;
   text-transform: uppercase; line-height: 0.92; text-wrap: balance;
@@ -240,7 +258,14 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     <button class="chip-btn" id="adSkin" type="button" hidden></button>
     <div class="row">
       <button class="go" id="play" type="button">Chạy thôi</button>
+      <button class="chip-btn" id="lbBtn" type="button">🏆 Xếp hạng</button>
     </div>
+    <details class="how"><summary>Sao lưu / chuyển tiến trình</summary>
+    <div class="tips" style="display:flex;flex-direction:column;gap:8px">
+      <textarea id="bkTx" rows="3" placeholder="Mã lưu hiện ở đây. Muốn nhập thì dán mã vào đây." style="width:100%;background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:8px;font-size:12px"></textarea>
+      <div class="row"><button class="chip-btn" id="bkOut" type="button">Xuất mã lưu</button><button class="chip-btn" id="bkIn" type="button">Nhập mã lưu</button></div>
+      <p id="bkMsg"></p>
+    </div></details>
     <details class="how"><summary>Hướng dẫn &amp; vật phẩm</summary>
     <div class="tips">
       <div class="tip"><canvas id="tipSpring" width="34" height="34"></canvas><div><b>Giày lò xo</b><span>Nhảy rất cao, vượt cả tàu</span></div></div>
@@ -281,13 +306,66 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     <div class="row">
       <button class="go" id="again" type="button">Chạy lại</button>
       <button class="chip-btn" id="toMenu" type="button">Sảnh chờ</button>
+      <button class="chip-btn" id="lbBtn2" type="button">🏆 Xếp hạng</button>
     </div>
+  </section>
+  <section class="panel rec" id="recPop" hidden>
+    <div class="trophy">🏆</div>
+    <h2>Kỷ lục mới!</h2>
+    <div class="recScore" id="recScore">0</div>
+    <p id="recOld"></p>
+    <label class="nm">Tên trên bảng xếp hạng<input id="recName" maxlength="14" autocomplete="off"></label>
+    <button class="go" id="recGo" type="button">Tuyệt vời!</button>
+    <div id="confetti"></div>
+  </section>
+  <section class="panel" id="lb" hidden>
+    <h2>Xếp hạng</h2>
+    <p id="lbSrc"></p>
+    <ol id="lbList"></ol>
+    <label class="nm">Tên của bạn<input id="pName" maxlength="14" autocomplete="off"></label>
+    <div class="row"><button class="chip-btn" id="lbClose" type="button">‹ Quay lại</button></div>
   </section>
 </div>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
+  // ---------- lưu tiến trình tự động (nhiều lớp dự phòng) ----------
+  // Ghi đồng thời vào localStorage + cookie + window.name, khi tải lại lấy bản mới nhất.
+  const Store = (() => {
+    const KEY = 'chayngo-save-v1', WN = 'chayngo:';
+    let data = {}, ts = 0, okLS = false, timer = 0;
+    const parse = s => { try { const o = JSON.parse(s); return o && typeof o === 'object' && o.d ? o : null; } catch (e) { return null; } };
+    const readers = [
+      () => { const v = localStorage.getItem(KEY); okLS = true; return parse(v); },
+      () => { const m = document.cookie.match(new RegExp('(?:^|; )' + KEY + '=([^;]*)')); return m ? parse(decodeURIComponent(m[1])) : null; },
+      () => window.name && window.name.indexOf(WN) === 0 ? parse(window.name.slice(WN.length)) : null
+    ];
+    readers.forEach(r => { try { const o = r(); if (o && o.t >= ts) { ts = o.t; data = o.d; } } catch (e) {} });
+    // dữ liệu cũ (bản trước lưu từng khóa riêng lẻ) -> gộp vào để không mất
+    try {
+      if (!Object.keys(data).length) {
+        for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('chayngo-') === 0 && k !== KEY) data[k] = localStorage.getItem(k); }
+      }
+    } catch (e) {}
+    function flush() {
+      clearTimeout(timer); timer = 0;
+      const s = JSON.stringify({ t: Date.now(), d: data });
+      try { localStorage.setItem(KEY, s); okLS = true; } catch (e) {}
+      try { document.cookie = KEY + '=' + encodeURIComponent(s) + '; max-age=31536000; path=/; SameSite=Lax'; } catch (e) {}
+      try { if (!window.name || window.name.indexOf(WN) === 0) window.name = WN + s; } catch (e) {}
+    }
+    const save = () => { if (!timer) timer = setTimeout(flush, 150); };
+    addEventListener('pagehide', flush);
+    addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+    setInterval(flush, 5000);
+    return {
+      get: k => (k in data ? data[k] : null),
+      set: (k, v) => { data[k] = String(v); save(); },
+      flush, dump: () => JSON.stringify({ t: Date.now(), d: data }), get persistent() { return okLS; }
+    };
+  })();
   const stage = $('stage'), cv = $('cv'), ctx = cv.getContext('2d');
   const hud = $('hud'), menu = $('menu'), over = $('over');
   const scoreEl = $('score'), coinsEl = $('coins'), muteBtn = $('mute');
@@ -308,7 +386,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   const skDur = c => c.dive ? 3 : 5;
   const skCd = c => c.dive ? 50 : 45;
   let charIdx = 0;
-  try { const s = localStorage.getItem('chayngo-char'); const i = CHARS.findIndex(c => c.id === s); if (i >= 0) charIdx = i; } catch (e) {}
+  try { const s = Store.get('chayngo-char'); const i = CHARS.findIndex(c => c.id === s); if (i >= 0) charIdx = i; } catch (e) {}
   const SKINS = {
     ti: [{ name: 'Mặc định' }, { name: 'Phố đêm', desc: 'Áo tím neon, mũ đen chạy đêm.', o: { top: '#7a5cff', topD: '#5a3fd0', acc: '#ffd24a', hc: '#2b2b4a', hc2: '#7a5cff' } }],
     mai: [{ name: 'Mặc định' }, { name: 'Băng tuyết', desc: 'Áo xanh băng, tóc tím nhạt.', o: { top: '#9ad7ff', topD: '#6fb0e0', acc: '#ffffff', hc: '#5a3a8a', hc2: '#9ad7ff' } }],
@@ -326,8 +404,8 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   // ---------- kim cương & cửa hàng trang phục ----------
   const BOX_GEM_RATE = 0.3;   // tỉ lệ hộp ra kim cương
   let gems = 0, runGems = 0, owned = {};
-  try { gems = parseInt(localStorage.getItem('chayngo-gems') || '0', 10) || 0; owned = JSON.parse(localStorage.getItem('chayngo-owned') || '{}') || {}; } catch (e) {}
-  const saveGems = () => { try { localStorage.setItem('chayngo-gems', String(gems)); localStorage.setItem('chayngo-owned', JSON.stringify(owned)); } catch (e) {} };
+  try { gems = parseInt(Store.get('chayngo-gems') || '0', 10) || 0; owned = JSON.parse(Store.get('chayngo-owned') || '{}') || {}; } catch (e) {}
+  const saveGems = () => { try { Store.set('chayngo-gems', String(gems)); Store.set('chayngo-owned', JSON.stringify(owned)); } catch (e) {} };
   const isOwned = (c, si) => !c.skins[si].price || !!owned[c.id + ':' + si];
   const toastEl = document.createElement('div'); toastEl.id = 'toast'; $('stage').appendChild(toastEl);
   let toastT = 0;
@@ -339,8 +417,8 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   const AD_MAX = 3, AD_SECS = 5;
   const dayKey = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
   let ads = { d: dayKey(), n: 0 }, trial = '';
-  try { const a = JSON.parse(localStorage.getItem('chayngo-ads') || 'null'); if (a && a.d === ads.d) ads = a; trial = localStorage.getItem('chayngo-trial') || ''; } catch (e) {}
-  const saveAds = () => { try { localStorage.setItem('chayngo-ads', JSON.stringify(ads)); localStorage.setItem('chayngo-trial', trial); } catch (e) {} };
+  try { const a = JSON.parse(Store.get('chayngo-ads') || 'null'); if (a && a.d === ads.d) ads = a; trial = Store.get('chayngo-trial') || ''; } catch (e) {}
+  const saveAds = () => { try { Store.set('chayngo-ads', JSON.stringify(ads)); Store.set('chayngo-trial', trial); } catch (e) {} };
   const adsLeft = () => { if (ads.d !== dayKey()) ads = { d: dayKey(), n: 0 }; return Math.max(0, AD_MAX - ads.n); };
   let adTimer = 0;
   function showAd(key) {
@@ -361,7 +439,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   }
   function gemUI() { $('menuGems').textContent = gems; $('gemsHud').textContent = gems; }
   const skinSel = {};
-  CHARS.forEach(c => { skinSel[c.id] = 0; try { const v = parseInt(localStorage.getItem('chayngo-skin-' + c.id) || '0', 10); if (v >= 0 && v < c.skins.length && isOwned(c, v)) skinSel[c.id] = v; } catch (e) {} });
+  CHARS.forEach(c => { skinSel[c.id] = 0; try { const v = parseInt(Store.get('chayngo-skin-' + c.id) || '0', 10); if (v >= 0 && v < c.skins.length && isOwned(c, v)) skinSel[c.id] = v; } catch (e) {} });
   const effCache = {};
   function eff(i, si) {
     const b = CHARS[i]; if (si === undefined) si = skinSel[b.id];
@@ -391,9 +469,12 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   let camV = 0, spiritT = 0, spiritMeter = 0.5, combo = 1, comboT = 0, streak = 0, cscore = 0;
   let obs = [], cns = [], pw = [], parts = [];
   const player = { x: 0, lane: 0, y: 0, vy: 0, fl: 0, roll: 0, fall: false, phase: 0, spring: 0, fly: false, inv: 0, stun: 0, warn: 0, blink: 0, ghost: false, magnet: 0 };
+  // ---------- người đuổi theo (bảo vệ + chó, kiểu Subway Surfers) ----------
+  const chase = { k: 0, x: 0, dx: 0.6, ph: 0, caught: 0, intro: 0 };
+  const GUARD = { skin: '#d9a07a', top: '#2c58b8', topD: '#1d3a85', acc: '#ffd24a', pants: '#1a2448', shoe: '#14141c', hair: 'cap', hc: '#1f3f8f', hc2: '#ffd24a' };
   const G = { W: 0, H: 0, hor: 0, laneW: 0, cx: 0, camX: 0, dpr: 1, lift: 0 };
 
-  try { best = parseInt(localStorage.getItem('chayngo-best') || '0', 10) || 0; } catch (e) {}
+  try { best = parseInt(Store.get('chayngo-best') || '0', 10) || 0; } catch (e) {}
   $('menuBest').textContent = best;
 
   // static backdrop data
@@ -442,6 +523,8 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     spirit() { tone(300, 0.5, 'sine', 0.1, 900); tone(600, 0.6, 'triangle', 0.05, 600, 0.1); },
     box() { tone(520, 0.1, 'triangle', 0.07); tone(660, 0.1, 'triangle', 0.07, 0, 0.09); tone(880, 0.22, 'triangle', 0.07, 0, 0.18); },
     gem() { tone(1200, 0.12, 'sine', 0.07); tone(1600, 0.14, 'sine', 0.07, 0, 0.09); tone(2000, 0.3, 'sine', 0.06, 0, 0.19); },
+    record() { [660, 880, 1100, 1320, 1760].forEach((f, i) => tone(f, 0.22, 'triangle', 0.07, 0, i * 0.11)); },
+    whistle() { tone(2300, 0.14, 'sine', 0.045, 250); tone(2550, 0.22, 'sine', 0.045, -300, 0.17); },
     bump() { tone(130, 0.22, 'square', 0.09, -60); tone(260, 0.18, 'triangle', 0.05, -120, 0.03); },
     crash() { tone(170, 0.5, 'sawtooth', 0.13, -130); tone(90, 0.4, 'square', 0.08, -40, 0.05); }
   };
@@ -530,7 +613,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   // ---------- character drawing (unit space: feet at 0, head near -1.45) ----------
   // fish form: dives under the street, only a fin and ripples show above ground
   function drawFish(x, gy, s, pal) {
-    pal = pal || { b: pal.b, b2: pal.b2, f: pal.f, d: pal.d, r: '160,230,255' };
+    pal = Object.assign({ b: '#2f6fd0', b2: '#7fd0ff', f: '#9fe3ff', d: '#1c3f8a', r: '160,230,255' }, pal || {});
     const t = time, sw = Math.sin(t * 14) * s * 0.1;
     ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (let k = 0; k < 3; k++) {
@@ -848,7 +931,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     b.appendChild(cn); b.appendChild(nm);
     return { b, c: cn.getContext('2d') };
   }
-  function selectChar(i) { charIdx = i; try { localStorage.setItem('chayngo-char', CHARS[i].id); } catch (e) {} syncCast(); }
+  function selectChar(i) { charIdx = i; try { Store.set('chayngo-char', CHARS[i].id); } catch (e) {} syncCast(); }
   CHARS.forEach((ch, i) => {
     const m = mkPick(ch.name, ch.name + ': ' + ch.trait);
     cast.appendChild(m.b); previews.push({ c: m.c });
@@ -862,7 +945,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
       const m = mkPick((lk ? '🔒 ' : '') + (sk.epic ? '★ ' : '') + sk.name, 'Trang phục ' + sk.name, (sk.epic ? 'epic' : '') + (lk ? ' locked' : ''));
       m.b.setAttribute('aria-checked', String(si === skinSel[base.id]));
       skinsEl.appendChild(m.b); skinPv.push({ c: m.c, si });
-      m.b.addEventListener('click', () => { skinSel[base.id] = si; try { localStorage.setItem('chayngo-skin-' + base.id, String(si)); } catch (e) {} syncCast(); });
+      m.b.addEventListener('click', () => { skinSel[base.id] = si; try { Store.set('chayngo-skin-' + base.id, String(si)); } catch (e) {} syncCast(); });
     });
   }
   function drawPreviews() {
@@ -1018,12 +1101,13 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     spiritT = 0; spiritMeter = 0.2; combo = 1; comboT = 0; streak = 0; cscore = 0; skillBtn.hidden = true;
     obs = []; cns = []; pw = []; parts = []; spawnD = 45; nextPow = 120; nextBox = 90; runGems = 0; flyEnd = 0; dashT = 0; trail = [];
     Object.assign(player, { x: 0, lane: 0, y: 0, vy: 0, fl: 0, roll: 0, fall: false, phase: 0, spring: 0, fly: false, inv: 0, stun: 0, warn: 0, blink: 0, ghost: false, magnet: 0 });
+    Object.assign(chase, { k: 1, x: 0, dx: 0.6, ph: 0, caught: 0, intro: 3.2 });
     scoreEl.textContent = '0'; coinsEl.textContent = '0';
     buffsEl.hidden = true; bS.hidden = true; bR.hidden = true; bM.hidden = true; bG.hidden = true; comboEl.textContent = 'x1';
   }
   function start() {
-    { const b0 = CHARS[charIdx]; if (!isOwned(b0, skinSel[b0.id]) && trial === b0.id + ':' + skinSel[b0.id]) { trial = ''; saveAds(); } else if (!isOwned(b0, skinSel[b0.id])) { skinSel[b0.id] = 0; try { localStorage.setItem('chayngo-skin-' + b0.id, '0'); } catch (e) {} syncCast(); } }
-    ac(); reset(); state = 'play'; skillBtn.hidden = !hasSkill(CH());
+    { const b0 = CHARS[charIdx]; if (!isOwned(b0, skinSel[b0.id]) && trial === b0.id + ':' + skinSel[b0.id]) { trial = ''; saveAds(); } else if (!isOwned(b0, skinSel[b0.id])) { skinSel[b0.id] = 0; try { Store.set('chayngo-skin-' + b0.id, '0'); } catch (e) {} syncCast(); } }
+    ac(); reset(); state = 'play'; sfx.whistle(); recPop.hidden = true; lbPanel.hidden = true; skillBtn.hidden = !hasSkill(CH());
     skillBtn.querySelector('span').innerHTML = CH().dive ? '🐟 Cá lặn<br>(E)' : '✦ Linh hồn<br>(E)';
     bG.querySelector('span').textContent = CH().dive ? 'Cá lặn' : 'Linh hồn';
     menu.hidden = true; over.hidden = true; hud.hidden = false;
@@ -1033,17 +1117,126 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     over.hidden = true; hud.hidden = true; menu.hidden = false;
     syncCast();
   }
+  // ---------- kỷ lục & bảng xếp hạng ----------
+  const LB = (() => {
+    let uid = null;
+    const getName = () => (Store.get('chayngo-name') || '').trim().slice(0, 14) || 'Người chơi';
+    const setName = n => { n = (n || '').trim().slice(0, 14); Store.set('chayngo-name', n); };
+    let local = [];
+    try { local = JSON.parse(Store.get('chayngo-top') || '[]') || []; } catch (e) {}
+    const addLocal = sc => { const top = Math.max(sc, ...local.map(r => r.score || 0)); local = [{ name: getName(), score: top, t: Date.now() }]; Store.set('chayngo-top', JSON.stringify(local)); };
+    // bảng toàn cầu: chỉ chạy khi trang được đăng trên Claude (có db); nếu không thì dùng bảng trên máy
+    const ready = (async () => {
+      try {
+        if (!window.claude || !claude.use) return null;
+        const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+        if (!db || !user) return null;
+        uid = await user.id();
+        return uid ? db : null;
+      } catch (e) { return null; }
+    })();
+    async function submit(sc) {
+      const db = await ready; if (!db || !(sc > 0)) return;
+      try {
+        const ref = db.collection('scores').doc(uid), snap = await ref.get(), old = snap.exists ? snap.data() : null;
+        if (!old || (old.score || 0) < sc) await ref.set({ name: getName(), score: sc, t: Date.now() });
+        else if (old.name !== getName()) await ref.update({ name: getName() });
+      } catch (e) {}
+    }
+    async function top() {
+      const db = await ready; if (!db) return null;
+      try { const q = await db.collection('scores').orderBy('score', 'desc').limit(20).get(); return q.docs.map(d => Object.assign({ id: d.id }, d.data())); } catch (e) { return null; }
+    }
+    return { getName, setName, addLocal, submit, top, ready, get local() { return local; }, get uid() { return uid; } };
+  })();
+  const recPop = $('recPop'), lbPanel = $('lb'), lbList = $('lbList');
+  let lbFrom = null;
+  function confetti() {
+    const box = $('confetti'); box.innerHTML = '';
+    const cols = ['#ffc83d', '#ff5d8f', '#3ee0b0', '#8ff3ff', '#ff9f43', '#b9a6ff'];
+    for (let i = 0; i < 70; i++) {
+      const el = document.createElement('i');
+      el.style.left = Math.random() * 100 + '%'; el.style.background = cols[i % cols.length];
+      el.style.animationDuration = (2.2 + Math.random() * 2.2) + 's'; el.style.animationDelay = (Math.random() * 1.2) + 's';
+      el.style.transform = 'rotate(' + Math.random() * 360 + 'deg)';
+      box.appendChild(el);
+    }
+  }
+  function showRecord(prev) {
+    $('recScore').textContent = best;
+    $('recOld').textContent = prev > 0 ? 'Kỷ lục cũ: ' + prev : 'Kỷ lục đầu tiên của bạn!';
+    $('recName').value = LB.getName() === 'Người chơi' ? '' : LB.getName();
+    recPop.hidden = false; confetti(); sfx.record();
+  }
+  $('recGo').addEventListener('click', () => {
+    const n = $('recName').value.trim(); if (n) LB.setName(n);
+    LB.submit(lastRun); recPop.hidden = true; over.hidden = false;
+  });
+  async function openLB(from) {
+    lbFrom = from; menu.hidden = true; over.hidden = true; lbPanel.hidden = false;
+    $('pName').value = LB.getName() === 'Người chơi' ? '' : LB.getName();
+    lbList.innerHTML = ''; $('lbSrc').textContent = 'Đang tải…';
+    const rows = await LB.top();
+    const glob = !!rows, data = rows || LB.local.slice().sort((a, b) => b.score - a.score).slice(0, 1).map(r => Object.assign({ id: 'l' }, r, { name: LB.getName() }));
+    $('lbSrc').textContent = glob ? '🌐 Kỷ lục của tất cả người chơi' : '📱 Kỷ lục trên máy này (bảng toàn cầu chỉ có khi mở bản đã đăng trên Claude)';
+    if (!data.length) { $('lbSrc').textContent += ' — chưa có ai, chạy một ván đi!'; return; }
+    data.forEach((r, i) => {
+      const li = document.createElement('li'); li.className = glob ? (r.id === LB.uid ? 'me' : '') : 'loc';
+      const a = document.createElement('b'), n = document.createElement('span'), sc = document.createElement('b');
+      a.textContent = i < 3 ? ['🥇', '🥈', '🥉'][i] : '#' + (i + 1); n.textContent = r.name || 'Người chơi'; sc.textContent = r.score;
+      li.append(a, n, sc); lbList.appendChild(li);
+    });
+  }
+  $('pName').addEventListener('input', () => {
+    LB.setName($('pName').value);
+    lbList.querySelectorAll('li.me span, li.loc span').forEach(sp => { sp.textContent = LB.getName(); });
+  });
+  $('lbBtn').addEventListener('click', () => openLB('menu'));
+  $('lbBtn2').addEventListener('click', () => openLB('over'));
+  $('lbClose').addEventListener('click', () => {
+    const n = $('pName').value.trim(); if (n) { LB.setName(n); LB.submit(lastRun); }
+    lbPanel.hidden = true; (lbFrom === 'over' ? over : menu).hidden = false;
+  });
+  let lastRun = 0; // chỉ điểm của ván chơi thật mới được gửi lên bảng xếp hạng
+
+  // ---------- sao lưu / chuyển tiến trình giữa các bản ----------
+  function importSave(txt) {
+    let o, d = null; try { o = JSON.parse((txt || '').trim()); } catch (e) { return 'Mã không hợp lệ.'; }
+    if (o && o['chayngo-save-v1']) { try { d = JSON.parse(o['chayngo-save-v1']).d; } catch (e) {} }
+    else if (o && o.d && typeof o.d === 'object') d = o.d;
+    else if (o && typeof o === 'object') { d = {}; Object.keys(o).forEach(k => { if (k.indexOf('chayngo-') === 0 && k !== 'chayngo-save-v1') d[k] = o[k]; }); }
+    if (!d || !Object.keys(d).length) return 'Không thấy dữ liệu game trong mã này.';
+    const cur = k => parseInt(Store.get(k) || '0', 10) || 0, inc = k => parseInt(d[k] || '0', 10) || 0;
+    Store.set('chayngo-gems', Math.max(cur('chayngo-gems'), inc('chayngo-gems')));
+    Store.set('chayngo-best', Math.max(cur('chayngo-best'), inc('chayngo-best')));
+    try { Store.set('chayngo-owned', JSON.stringify(Object.assign(JSON.parse(Store.get('chayngo-owned') || '{}') || {}, JSON.parse(d['chayngo-owned'] || '{}') || {}))); } catch (e) {}
+    try { const t = (JSON.parse(Store.get('chayngo-top') || '[]') || []).concat(JSON.parse(d['chayngo-top'] || '[]') || []); t.sort((a, b) => b.score - a.score); Store.set('chayngo-top', JSON.stringify(t.slice(0, 10))); } catch (e) {}
+    Object.keys(d).forEach(k => { if (/^chayngo-(char|name|skin-.+)$/.test(k)) Store.set(k, d[k]); });
+    Store.flush(); return null;
+  }
+  $('bkOut').addEventListener('click', async () => {
+    const tx = $('bkTx'); tx.value = Store.dump(); tx.select();
+    let ok = false; try { await navigator.clipboard.writeText(tx.value); ok = true; } catch (e) {}
+    $('bkMsg').textContent = ok ? 'Đã sao chép mã lưu. Dán vào ô "Nhập" ở bản khác.' : 'Hãy chọn và sao chép mã trong ô trên.';
+  });
+  $('bkIn').addEventListener('click', () => {
+    const err = importSave($('bkTx').value);
+    if (err) { $('bkMsg').textContent = err; return; }
+    $('bkMsg').textContent = 'Đã nhập! Đang tải lại…'; setTimeout(() => location.reload(), 600);
+  });
+
   function crash() {
     if (state !== 'play') return;
     state = 'dead'; skillBtn.hidden = true; shake = 0.7; flash = 0.8; sfx.crash();
     const prev = best;
-    if (score > best) { best = score; try { localStorage.setItem('chayngo-best', String(best)); } catch (e) {} }
+    if (score > best) { best = score; try { Store.set('chayngo-best', String(best)); } catch (e) {} }
     setTimeout(() => {
       if (state !== 'dead') return;
       $('rScore').textContent = score; $('rCoins').textContent = coins; $('rBest').textContent = best;
       $('rNote').textContent = (score > prev && score > 0 ? 'Kỷ lục mới! ' : '') + (runGems > 0 ? '💎 +' + runGems + ' kim cương' : '');
       $('menuBest').textContent = best;
-      over.hidden = false;
+      if (score > 0) { LB.addLocal(score); lastRun = score; LB.submit(score); }
+      if (score > prev && score > 0) showRecord(prev); else over.hidden = false;
     }, 700);
   }
 
@@ -1162,6 +1355,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
       drawHero();
       return;
     }
+    updateChase(dt);
     if (state === 'dead') return;
 
     const ch = CH();
@@ -1248,7 +1442,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
           if (player.inv <= 0 && player.warn > 0) { crash(); break; }
           if (player.inv <= 0) {
             player.warn = 4.5; player.stun = 0.5; player.blink = 1.8; speed = Math.max(8, speed * 0.72);
-            shake = Math.max(shake, 0.4); sfx.bump();
+            shake = Math.max(shake, 0.4); sfx.bump(); sfx.whistle();
             const q = P(player.x, player.y + 0.8, 0); burst(q[0], q[1], 14, '#ffe27a', 90);
           }
           continue;
@@ -1543,6 +1737,52 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     }
   }
 
+  function updateChase(dt) {
+    const dead = state === 'dead';
+    if (dead) chase.caught = Math.min(1, chase.caught + dt * 3);
+    if (chase.intro > 0) chase.intro -= dt;
+    const want = dead || (!player.fly && (player.warn > 0 || chase.intro > 0)) ? 1 : 0;
+    chase.k += (want - chase.k) * Math.min(1, dt * (want ? 4 : 1.6));
+    if (want && chase.k > 0.995) chase.k = 1;
+    if (!want && chase.k < 0.01) chase.k = 0;
+    chase.x += (player.x - chase.x) * Math.min(1, dt * (dead ? 12 : 4));
+    const side = chase.x > 0.15 ? -1 : 1;
+    const tx = Math.max(-1.25, Math.min(1.25, chase.x + side * 0.62));
+    chase.dx += (tx - chase.dx) * Math.min(1, dt * 5);
+    chase.ph += dt * Math.max(8, speed) * 0.95;
+  }
+  function drawDog(x, gy, s, ph) {
+    const sw = Math.sin(ph), bob = -Math.abs(Math.sin(ph)) * 0.05, wag = Math.sin(ph * 1.7);
+    ctx.save(); ctx.translate(x, gy); ctx.scale(s, s); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(0, 0.02, 0.27, 0.07, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(0, bob);
+    ctx.strokeStyle = '#5a3719'; ctx.lineWidth = 0.075;
+    for (const k of [-1, 1]) { const a = sw * k; ctx.beginPath(); ctx.moveTo(k * 0.11, -0.2); ctx.lineTo(k * 0.13 + a * 0.05, -0.03 - Math.max(0, a) * 0.09); ctx.stroke(); }
+    ctx.fillStyle = '#8b5a2b'; ctx.beginPath(); ctx.ellipse(0, -0.27, 0.19, 0.17, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#8b5a2b'; ctx.lineWidth = 0.055;
+    ctx.beginPath(); ctx.moveTo(0, -0.37); ctx.quadraticCurveTo(wag * 0.12, -0.55, wag * 0.17, -0.63); ctx.stroke();
+    ctx.fillStyle = '#a06a35'; circ(ctx, 0, -0.47, 0.105);
+    ctx.fillStyle = '#5a3719';
+    for (const d of [-1, 1]) { ctx.beginPath(); ctx.ellipse(d * 0.095, -0.53 + Math.abs(sw) * 0.015, 0.04, 0.07, d * 0.4, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = '#ff5d5d'; ctx.lineWidth = 0.035; ctx.beginPath(); ctx.arc(0, -0.4, 0.09, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+    ctx.restore();
+  }
+  function drawChaser() {
+    const c = chase.caught, ez = 1 - (1 - c) * (1 - c);
+    const zc = -0.95 + 0.62 * ez, e = chase.k;
+    const q = P(chase.x, 0, zc), s = G.laneW * q[2] * 1.12;
+    const gy = q[1] + s * 0.62 + (1 - e) * s * 2.6;
+    const qd = P(chase.dx, 0, zc + 0.12), sd = G.laneW * qd[2] * 1.12;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, e * 2.2);
+    drawDog(qd[0], qd[1] + sd * 0.62 + (1 - e) * sd * 2.6, sd, chase.ph * 1.3 + 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(q[0], gy, s * 0.36, s * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(q[0], gy - Math.abs(Math.sin(chase.ph)) * 0.06 * s);
+    ctx.scale(s, s);
+    drawChar(ctx, GUARD, { ph: chase.ph, air: false, roll: false, spring: false, fly: c > 0.4, t: time, ang: 0, dash: 0 });
+    ctx.restore();
+  }
+
   function render() {
     geom();
     const W = G.W, H = G.H, hor = G.hor, cx = G.cx;
@@ -1682,9 +1922,11 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
     for (const c of cns) { const z = c.d - dist; if (z < 80 && z > -1.1) items.push({ z, c }); }
     for (const p of pw) { const z = p.d - dist; if (z < 80 && z > -1.1) items.push({ z, p }); }
     items.push({ z: 0, pl: true });
+    if ((state === 'play' || state === 'dead') && chase.k > 0.01) items.push({ z: -0.95, chaser: true });
     items.sort((a, b) => b.z - a.z);
     for (const it of items) {
       if (it.pl) { if (player.magnet > 0 && !player.fly) { const m = P(player.x, player.y + 0.7, 0); glow(ctx, m[0], m[1], G.laneW * m[2] * (1.5 + 0.2 * Math.sin(time * 8)), '255,93,143', 0.22); } drawTrail(); drawPlayer(); }
+      else if (it.chaser) drawChaser();
       else if (it.o) drawObs(it.o, it.rz);
       else if (it.p) drawPower(it.p, it.z);
       else drawCoin(it.c, it.z);
@@ -1741,6 +1983,7 @@ canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; display: bl
   stage.addEventListener('pointercancel', up);
 
   window.addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
     const map = { arrowleft: 'l', a: 'l', arrowright: 'r', d: 'r', arrowup: 'u', w: 'u', ' ': 'u', arrowdown: 'd', s: 'd', e: 's', q: 's', shift: 's' };
     if (state === 'play' && map[k]) { e.preventDefault(); act(map[k]); return; }
